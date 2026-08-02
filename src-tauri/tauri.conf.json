@@ -31,6 +31,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": [],
     "resources": {
       "../tools/builtin/image-compressor.py": "tools/builtin/image-compressor.py",
       "../tools/builtin/batch-renamer.mjs": "tools/builtin/batch-renamer.mjs",
