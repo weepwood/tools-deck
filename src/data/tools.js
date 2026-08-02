@@ -7,22 +7,23 @@ export const categories = [
   { id: 'developer', name: '开发工具', icon: 'code' },
 ]
 
+const nativeRuntime = { type: 'builtin', label: 'Rust 内置', status: 'ready' }
+
 export const initialTools = [
   {
     id: 'image-compressor',
     name: '图片批量压缩',
-    description: '批量压缩 JPG、PNG 与 WebP 图片，并保留原始目录结构。',
+    description: '使用内置 Rust 图像引擎批量重新编码 JPG、PNG 与 WebP，并保留目录结构。',
     category: 'image',
     icon: 'image',
     accent: 'violet',
-    tags: ['图片', '压缩', '批处理'],
-    runtime: { type: 'python', label: 'Python 3', status: 'ready' },
-    execution: { entry: 'tools/builtin/image-compressor.py', timeoutSeconds: 3600 },
+    tags: ['图片', '压缩', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'input', label: '输入文件夹', type: 'directory', required: true, placeholder: '选择需要处理的图片目录' },
       { key: 'output', label: '输出文件夹', type: 'directory', required: true, placeholder: '选择结果保存目录' },
-      { key: 'quality', label: '图片质量', type: 'range', min: 30, max: 100, default: 82 },
+      { key: 'quality', label: 'JPEG 图片质量', type: 'range', min: 30, max: 100, default: 82 },
       { key: 'recursive', label: '包含子目录', type: 'boolean', default: true },
     ],
     output: { artifacts: [{ type: 'directory', label: '压缩结果目录' }] },
@@ -30,13 +31,12 @@ export const initialTools = [
   {
     id: 'batch-renamer',
     name: '文件批量重命名',
-    description: '按前缀和序号批量重命名文件，默认只预览，不修改原文件。',
+    description: '使用内置文件系统能力按前缀和序号重命名文件，默认只生成预览。',
     category: 'file',
     icon: 'file',
     accent: 'blue',
-    tags: ['文件', '重命名', '预览'],
-    runtime: { type: 'node', label: 'Node.js', status: 'ready' },
-    execution: { entry: 'tools/builtin/batch-renamer.mjs', timeoutSeconds: 1800 },
+    tags: ['文件', '重命名', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'directory', label: '目标目录', type: 'directory', required: true, placeholder: '选择文件目录' },
@@ -49,13 +49,12 @@ export const initialTools = [
   {
     id: 'excel-merger',
     name: 'Excel 批量合并',
-    description: '合并多个结构一致的 Excel 文件，并自动补充来源文件列。',
+    description: '使用内置 Rust Excel 引擎合并结构一致的工作表，并补充来源文件列。',
     category: 'data',
     icon: 'database',
     accent: 'green',
-    tags: ['Excel', '合并', '数据'],
-    runtime: { type: 'python', label: 'Python 3 + openpyxl', status: 'ready' },
-    execution: { entry: 'tools/builtin/excel-merger.py', timeoutSeconds: 3600 },
+    tags: ['Excel', '合并', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'files', label: 'Excel 文件', type: 'files', required: true },
@@ -68,13 +67,12 @@ export const initialTools = [
   {
     id: 'http-batch-check',
     name: 'HTTP 批量检测',
-    description: '批量检查 URL 状态码、响应时间和最终跳转地址。',
+    description: '使用内置异步 HTTP 客户端检查状态码、响应时间和最终跳转地址。',
     category: 'network',
     icon: 'globe',
     accent: 'cyan',
-    tags: ['HTTP', '监控', '网络'],
-    runtime: { type: 'python', label: 'Python 3', status: 'ready' },
-    execution: { entry: 'tools/builtin/http-batch-check.py', timeoutSeconds: 1800 },
+    tags: ['HTTP', '检测', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'urls', label: 'URL 列表', type: 'textarea', required: true, placeholder: '每行一个 URL' },
@@ -86,13 +84,12 @@ export const initialTools = [
   {
     id: 'git-repo-audit',
     name: 'Git 仓库巡检',
-    description: '检查未提交变更、当前分支和长期未更新的本地分支。',
+    description: '通过内置 libgit2 检查工作区状态、当前分支和长期未更新的本地分支。',
     category: 'developer',
     icon: 'terminal',
     accent: 'orange',
-    tags: ['Git', '代码审查', '分支'],
-    runtime: { type: 'powershell', label: 'PowerShell', status: 'ready' },
-    execution: { entry: 'tools/builtin/git-repo-audit.ps1', timeoutSeconds: 900 },
+    tags: ['Git', '巡检', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'repository', label: '仓库目录', type: 'directory', required: true },
@@ -103,12 +100,12 @@ export const initialTools = [
   {
     id: 'json-formatter',
     name: 'JSON 格式化与校验',
-    description: '格式化、压缩并检查 JSON 数据，定位语法错误。',
+    description: '使用内置 Rust JSON 引擎格式化、排序并定位语法错误。',
     category: 'developer',
     icon: 'code',
     accent: 'pink',
-    tags: ['JSON', '格式化', '开发'],
-    runtime: { type: 'builtin', label: '内置工具', status: 'ready' },
+    tags: ['JSON', '格式化', 'Rust'],
+    runtime: nativeRuntime,
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'content', label: 'JSON 内容', type: 'textarea', required: true, placeholder: '{\n  "hello": "world"\n}' },
