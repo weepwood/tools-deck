@@ -40,31 +40,47 @@ def main():
     target = Workbook()
     target_sheet = target.active
     target_sheet.title = "Merged"
-    wrote_header = False
+    reference_header = None
     total_rows = 0
+    merged_files = 0
 
     for index, file in enumerate(files, start=1):
+        if not file.is_file():
+            raise ValueError(f"文件不存在：{file}")
+
         workbook = load_workbook(file, read_only=True, data_only=True)
-        if sheet_name not in workbook.sheetnames:
-            raise ValueError(f"{file.name} 中不存在工作表 {sheet_name}")
-        sheet = workbook[sheet_name]
-        rows = sheet.iter_rows(values_only=True)
-        header = next(rows, None)
-        if header is None:
+        try:
+            if sheet_name not in workbook.sheetnames:
+                raise ValueError(f"{file.name} 中不存在工作表 {sheet_name}")
+            sheet = workbook[sheet_name]
+            rows = sheet.iter_rows(values_only=True)
+            header = next(rows, None)
+            if header is None:
+                emit({"type": "progress", "progress": min(95, 5 + round(index / len(files) * 90)), "message": f"[{index}/{len(files)}] 跳过空文件 {file.name}", "level": "warning"})
+                continue
+
+            normalized_header = tuple("" if value is None else str(value).strip() for value in header)
+            if reference_header is None:
+                reference_header = normalized_header
+                target_sheet.append(list(header) + (["来源文件"] if add_source else []))
+            elif normalized_header != reference_header:
+                raise ValueError(f"{file.name} 的表头与第一个有效文件不一致")
+
+            for row in rows:
+                target_sheet.append(list(row) + ([file.name] if add_source else []))
+                total_rows += 1
+            merged_files += 1
+        finally:
             workbook.close()
-            continue
-        if not wrote_header:
-            target_sheet.append(list(header) + (["来源文件"] if add_source else []))
-            wrote_header = True
-        for row in rows:
-            target_sheet.append(list(row) + ([file.name] if add_source else []))
-            total_rows += 1
-        workbook.close()
+
         emit({"type": "progress", "progress": min(95, 5 + round(index / len(files) * 90)), "message": f"[{index}/{len(files)}] 已合并 {file.name}"})
+
+    if reference_header is None:
+        raise ValueError("所选文件中没有可合并的数据")
 
     target.save(output_path)
     emit({"type": "artifact", "progress": 100, "artifact": {"type": "file", "label": output_path.name, "path": str(output_path), "content": str(output_path)}})
-    print(f"合并完成：{len(files)} 个文件，{total_rows} 行", flush=True)
+    print(f"合并完成：{merged_files} 个有效文件，{total_rows} 行", flush=True)
 
 
 if __name__ == "__main__":
