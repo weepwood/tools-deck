@@ -7,9 +7,44 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  generate-release-locks:
+    if: github.event_name == 'pull_request' && github.head_ref == 'release/v0.5.0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/v0.5.0
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate lockfiles
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+      - name: Restore standard CI and commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git add package-lock.json src-tauri/Cargo.lock .github/workflows/ci.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "build: 锁定 v0.5.0 版本信息"
+          git push origin HEAD:release/v0.5.0
+
   web:
     runs-on: ubuntu-latest
     steps:
