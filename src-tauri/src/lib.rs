@@ -1,3 +1,4 @@
+mod artifact_runtime;
 mod builtin_runtime;
 mod builtins;
 mod execution;
@@ -10,7 +11,6 @@ use execution::ProcessRegistry;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .manage(ProcessRegistry::default())
         .manage(BuiltinRegistry::default())
         .invoke_handler(tauri::generate_handler![
@@ -19,6 +19,9 @@ pub fn run() {
             execution::cancel_tool,
             builtin_runtime::run_builtin_tool,
             builtin_runtime::cancel_builtin,
+            artifact_runtime::open_artifact_path,
+            artifact_runtime::reveal_artifact_path,
+            artifact_runtime::read_artifact_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tools Deck");
