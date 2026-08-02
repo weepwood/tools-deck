@@ -21,14 +21,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install frontend dependencies
         run: npm install
+
+      - name: Install built-in tool dependencies
+        run: python -m pip install Pillow openpyxl
 
       - name: Check JavaScript
         run: npm run check
 
       - name: Test JavaScript
         run: npm test
+
+      - name: Test built-in Python tools
+        run: python -m unittest discover tools/builtin/tests
 
       - name: Build web application
         run: npm run build

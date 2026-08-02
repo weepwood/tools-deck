@@ -96,7 +96,6 @@ export const initialTools = [
     updatedAt: '2026-08-02',
     parameters: [
       { key: 'repository', label: '仓库目录', type: 'directory', required: true },
-      { key: 'checkDependencies', label: '检查依赖更新', type: 'boolean', default: true },
       { key: 'staleDays', label: '过期分支天数', type: 'number', default: 90, min: 7 },
     ],
     output: { artifacts: [{ type: 'file', label: 'git-audit-report.md' }] },
