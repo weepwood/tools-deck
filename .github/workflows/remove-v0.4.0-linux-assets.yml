@@ -1,0 +1,29 @@
+name: Remove v0.4.0 Linux Assets
+
+on:
+  push:
+    branches:
+      - chore/windows-macos-release-only
+    paths:
+      - .github/workflows/remove-v0.4.0-linux-assets.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove Linux release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for asset in \
+            "Tools.Deck-0.4.0-1.x86_64.rpm" \
+            "Tools.Deck_0.4.0_amd64.AppImage" \
+            "Tools.Deck_0.4.0_amd64.deb"
+          do
+            gh release delete-asset v0.4.0 "$asset" \
+              --repo "${{ github.repository }}" \
+              --yes
+          done
