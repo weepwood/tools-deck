@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   apply-phase2:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/ui-phase-2-results'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout full repository
@@ -126,32 +126,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Update lockfiles
         run: |
           npm install --package-lock-only --ignore-scripts
           cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-
       - name: Commit feature branch
         run: |
           git rm -f .github/workflows/apply-ui-phase2.yml || true
           git add src/App.jsx src/main.jsx src-tauri/src/builtins.rs package-lock.json src-tauri/Cargo.lock
           git commit -m "feat: 完善批处理与检测结果工作区"
           git push origin HEAD:feat/ui-phase-2-results
-
-      - name: Restore CI and clean main
-        run: |
-          git checkout main
-          git pull --ff-only origin main
-          git show HEAD^:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git rm -f .github/workflows/apply-ui-phase2-from-main.yml
-          git rm -f docs/ui-phase-2-implementation.md docs/.phase2-marker docs/.phase2-branch-note || true
-          git add .github/workflows/ci.yml
-          git commit -m "chore: 清理第二阶段临时执行文件"
-          git push origin main
 
   web:
     runs-on: ubuntu-latest
