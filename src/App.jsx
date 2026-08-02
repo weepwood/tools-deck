@@ -151,8 +151,10 @@ function App() {
     } else {
       setParams(getDefaultParams(selectedTool))
     }
-    setLogs([])
-    setRunState(null)
+    if (runState?.status !== 'running') {
+      setLogs([])
+      setRunState(null)
+    }
   }, [selectedTool?.id])
 
   useEffect(() => {
@@ -196,7 +198,10 @@ function App() {
 
   const openTool = (tool, nextParams = null) => {
     if (!tool) return
-    if (nextParams) restoreRef.current = { toolId: tool.id, params: nextParams }
+    if (nextParams) {
+      if (selectedId === tool.id) setParams(cloneValue(nextParams))
+      else restoreRef.current = { toolId: tool.id, params: nextParams }
+    }
     setSelectedId(tool.id)
     setPage('workspace')
     setMobileNavOpen(false)
@@ -229,6 +234,10 @@ function App() {
 
   const runTool = async () => {
     if (!selectedTool || !validateParams(selectedTool, params) || runState?.status === 'running') return
+    if (queueRunning) {
+      notify('任务队列正在运行，请先停止队列')
+      return
+    }
     const controller = new AbortController()
     abortRef.current = controller
     const startedAt = new Date().toISOString()
@@ -304,6 +313,10 @@ function App() {
 
   const runQueue = async () => {
     if (queueRunning) return
+    if (runState?.status === 'running') {
+      notify('当前工具正在运行，请等待完成或先停止任务')
+      return
+    }
     const tasks = queue.filter((item) => item.status === 'pending')
     if (!tasks.length) {
       notify('队列中没有待运行任务')
@@ -362,6 +375,10 @@ function App() {
 
   const restoreHistory = (record) => {
     const tool = tools.find((item) => item.id === record.toolId)
+    if (!tool) {
+      notify('对应工具已不存在')
+      return
+    }
     openTool(tool, record.params ?? getDefaultParams(tool))
   }
 
@@ -413,6 +430,9 @@ function App() {
   const recentToolIds = [...new Set(history.map((item) => item.toolId))].slice(0, 6)
   const recentTools = recentToolIds.map((id) => tools.find((tool) => tool.id === id)).filter(Boolean)
   const latestRecord = history[0]
+  const selectedRunState = runState?.toolId === selectedTool?.id ? runState : null
+  const selectedLogs = runState?.toolId === selectedTool?.id ? logs : []
+  const activeRunTool = tools.find((tool) => tool.id === runState?.toolId) ?? selectedTool
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
@@ -478,8 +498,8 @@ function App() {
             params={params}
             presets={selectedPresets}
             favorite={favorites.includes(selectedTool.id)}
-            runState={runState}
-            logs={logs}
+            runState={selectedRunState}
+            logs={selectedLogs}
             runtimeMode={runtime.mode}
             onBack={() => navigate('library')}
             onParam={(key, value) => setParams((current) => ({ ...current, [key]: value }))}
@@ -538,7 +558,7 @@ function App() {
         queue={queue}
         tools={tools}
         runState={runState}
-        selectedTool={selectedTool}
+        selectedTool={activeRunTool}
         queueRunning={queueRunning}
         onClose={() => setActivityOpen(false)}
         onRunQueue={runQueue}
@@ -694,8 +714,7 @@ function HomeView({ tools, favorites, recentTools, history, latestRecord, queue,
               </div>
             </div>
             <div className="continue-card__actions">
-              <button className="secondary-button" onClick={() => onRestore(latestRecord)}>继续配置</button>
-              <button className="primary-button" onClick={() => onRestore(latestRecord)}><Icon name="play" />再次运行</button>
+              <button className="primary-button" onClick={() => onRestore(latestRecord)}><Icon name="sliders" />恢复参数</button>
             </div>
           </article>
         </section>
@@ -1010,7 +1029,7 @@ function ActivityDrawer({ open, queue, tools, runState, selectedTool, queueRunni
           })}
           {!activeItems.length && runState?.status !== 'running' ? <EmptyState icon="activity" title="没有活动任务" description="加入队列或运行工具后，进度会显示在这里。" /> : null}
         </div>
-        <footer>{activeItems.some((item) => item.status === 'pending') && !queueRunning ? <button className="primary-button" onClick={onRunQueue}><Icon name="play" />运行等待任务</button> : null}<button className="secondary-button" onClick={onOpenTasks}>打开完整任务页</button></footer>
+        <footer>{activeItems.some((item) => item.status === 'pending') && !queueRunning && runState?.status !== 'running' ? <button className="primary-button" onClick={onRunQueue}><Icon name="play" />运行等待任务</button> : null}<button className="secondary-button" onClick={onOpenTasks}>打开完整任务页</button></footer>
       </aside>
     </>
   )
