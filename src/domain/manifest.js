@@ -9,16 +9,22 @@ function isPlainObject(value) {
 }
 
 function normalizeParameter(parameter, index) {
-  const key = String(parameter.key ?? '').trim()
-  const type = String(parameter.type ?? 'text').trim()
-
-  return {
-    ...parameter,
+  const source = isPlainObject(parameter) ? parameter : {}
+  const key = String(source.key ?? '').trim()
+  const type = String(source.type ?? 'text').trim()
+  const normalized = {
+    ...source,
     key,
-    label: String(parameter.label ?? (key || `参数 ${index + 1}`)).trim(),
+    label: String(source.label ?? (key || `参数 ${index + 1}`)).trim(),
     type,
-    required: Boolean(parameter.required),
+    required: Boolean(source.required),
   }
+
+  if (type === 'select' && Array.isArray(source.options)) {
+    normalized.options = source.options.map((option) => String(option))
+  }
+
+  return normalized
 }
 
 export function validateToolManifest(input, { existingIds = [] } = {}) {
@@ -46,6 +52,7 @@ export function validateToolManifest(input, { existingIds = [] } = {}) {
 
   normalizedParameters.forEach((parameter, index) => {
     const prefix = `参数 ${index + 1}`
+    if (!isPlainObject(parameters[index])) errors.push(`${prefix} 必须是对象。`)
     if (!parameter.key) errors.push(`${prefix} 缺少 key。`)
     else if (parameterKeys.has(parameter.key)) errors.push(`参数 key「${parameter.key}」重复。`)
     else parameterKeys.add(parameter.key)
@@ -75,23 +82,27 @@ export function validateToolManifest(input, { existingIds = [] } = {}) {
     errors.push(`运行时类型「${runtimeType}」不受支持。`)
   }
 
+  const tags = Array.isArray(input.tags)
+    ? input.tags.map((tag) => String(tag).trim()).filter(Boolean)
+    : ['自定义']
+
   const manifest = {
-    description: '通过 JSON 定义导入的自定义工具。',
-    icon: 'box',
-    accent: 'blue',
-    tags: ['自定义'],
-    updatedAt: new Date().toISOString().slice(0, 10),
-    output: { artifacts: [] },
     ...input,
     id,
     name,
+    description: String(input.description ?? '通过 JSON 定义导入的自定义工具。').trim(),
     category,
+    icon: String(input.icon ?? 'box').trim() || 'box',
+    accent: String(input.accent ?? 'blue').trim() || 'blue',
+    tags,
+    updatedAt: String(input.updatedAt ?? new Date().toISOString().slice(0, 10)),
+    output: isPlainObject(input.output) ? input.output : { artifacts: [] },
     parameters: normalizedParameters,
     runtime: {
-      label: runtimeType === 'custom' ? '自定义运行时' : runtimeType,
-      status: runtimeType === 'builtin' ? 'ready' : 'setup',
       ...runtime,
       type: runtimeType,
+      label: String(runtime.label ?? (runtimeType === 'custom' ? '自定义运行时' : runtimeType)),
+      status: String(runtime.status ?? (runtimeType === 'builtin' ? 'ready' : 'setup')),
     },
   }
 
