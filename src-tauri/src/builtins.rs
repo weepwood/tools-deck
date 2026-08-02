@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs::{self, File},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
@@ -17,9 +17,10 @@ use git2::{BranchType, Repository, Status, StatusOptions};
 use image::{codecs::jpeg::JpegEncoder, ImageFormat, ImageReader};
 use reqwest::Client;
 use rust_xlsxwriter::{Workbook, Worksheet};
+use serde::Serialize;
 use serde_json::{Map, Value};
 use tauri::ipc::Channel;
-use tokio::task;
+use tokio::{task, time::sleep};
 use walkdir::WalkDir;
 
 use crate::models::{Artifact, RunEvent, RunResult, ToolRunRequest};
@@ -186,7 +187,7 @@ fn run_batch_renamer(
 ) -> Result<Vec<Artifact>, String> {
     let directory = canonical_directory(&required_string(request, "directory")?, "目标目录")?;
     let prefix = string_param(request, "prefix").unwrap_or_else(|| "file-".to_string());
-    if prefix.contains(['/', '\\', '\0']) {
+    if prefix.chars().any(|character| matches!(character, '/' | '\\' | '\0')) {
         return Err("文件名前缀不能包含路径分隔符或空字符。".to_string());
     }
     let start = number_param(request, "start", 1.0).max(0.0) as u64;
@@ -290,6 +291,7 @@ fn run_excel_merger(
         .map_err(|error| format!("设置输出工作表名称失败：{error}"))?;
 
     let mut expected_header: Option<Vec<String>> = None;
+    let mut header_columns: Option<usize> = None;
     let mut output_row: u32 = 0;
     let mut total_rows: u64 = 0;
 
@@ -315,10 +317,13 @@ fn run_excel_merger(
                     write_excel_cell(worksheet, output_row, column, cell)?;
                 }
                 if add_source {
+                    let source_column = u16::try_from(header.len())
+                        .map_err(|_| "Excel 列数超出限制。".to_string())?;
                     worksheet
-                        .write_string(output_row, header.len() as u16, "来源文件")
+                        .write_string(output_row, source_column, "来源文件")
                         .map_err(|error| format!("写入来源文件表头失败：{error}"))?;
                 }
+                header_columns = Some(header.len());
                 expected_header = Some(current_header);
                 output_row += 1;
             }
@@ -328,14 +333,20 @@ fn run_excel_merger(
             Some(_) => {}
         }
 
+        let expected_columns = header_columns.unwrap_or(header.len());
         for row in rows {
             ensure_running(&cancelled)?;
+            if row.len() > expected_columns {
+                return Err(format!("{} 存在超出表头范围的数据列。", file.display()));
+            }
             for (column, cell) in row.iter().enumerate() {
                 write_excel_cell(worksheet, output_row, column, cell)?;
             }
             if add_source {
+                let source_column = u16::try_from(expected_columns)
+                    .map_err(|_| "Excel 列数超出限制。".to_string())?;
                 worksheet
-                    .write_string(output_row, row.len() as u16, file_name(file))
+                    .write_string(output_row, source_column, file_name(file))
                     .map_err(|error| format!("写入来源文件列失败：{error}"))?;
             }
             output_row = output_row
@@ -390,12 +401,14 @@ async fn run_http_batch_check(
         let cancelled = cancelled.clone();
         async move {
             let started = Instant::now();
-            if cancelled.load(Ordering::SeqCst) {
-                return HttpCheckResult::cancelled(index, url);
-            }
-            let result = client.get(&url).send().await;
+            let request_future = client.get(&url).send();
+            tokio::pin!(request_future);
+            let result = tokio::select! {
+                response = &mut request_future => Some(response),
+                _ = wait_for_cancellation(cancelled.clone()) => None,
+            };
             match result {
-                Ok(response) => HttpCheckResult {
+                Some(Ok(response)) => HttpCheckResult {
                     index,
                     url,
                     status: response.status().as_u16(),
@@ -403,7 +416,7 @@ async fn run_http_batch_check(
                     final_url: response.url().to_string(),
                     error: String::new(),
                 },
-                Err(error) => HttpCheckResult {
+                Some(Err(error)) => HttpCheckResult {
                     index,
                     final_url: url.clone(),
                     url,
@@ -411,6 +424,7 @@ async fn run_http_batch_check(
                     duration_ms: started.elapsed().as_secs_f64() * 1000.0,
                     error: error.to_string(),
                 },
+                None => HttpCheckResult::cancelled(index, url),
             }
         }
     }))
@@ -626,54 +640,49 @@ fn execute_rename_plans(
     mut plans: Vec<RenamePlan>,
     rows: &mut Vec<(String, String, &'static str)>,
 ) -> Result<(), String> {
-    let mut staged = Vec::new();
-    for (index, plan) in plans.iter_mut().enumerate() {
-        ensure_running(&cancelled)?;
+    let total = plans.len().max(1);
+    for index in 0..plans.len() {
+        if cancelled.load(Ordering::SeqCst) {
+            rollback_all_renames(&plans);
+            return Err("任务已取消".to_string());
+        }
+        let plan = &mut plans[index];
         rows.push((file_name(&plan.source), plan.target_name.clone(), "renamed"));
         if same_path(&plan.source, &plan.target) {
             continue;
         }
         let temporary = unique_temporary_path(&plan.source, &request.run_id, index)?;
         if let Err(error) = fs::rename(&plan.source, &temporary) {
-            rollback_staged(&staged);
+            rollback_all_renames(&plans);
             return Err(format!("暂存文件 {} 失败：{error}", plan.source.display()));
         }
-        plan.temporary = Some(temporary.clone());
-        staged.push((temporary, plan.source.clone()));
+        plan.temporary = Some(temporary);
         send_progress(
             request,
             on_event,
-            progress(index + 1, plans.len().max(1), 5, 65),
+            progress(index + 1, total, 5, 65),
             format!("准备重命名 {}", file_name(&plan.source)),
             "info",
         );
     }
 
-    let mut completed = Vec::new();
-    for (index, plan) in plans.iter().enumerate() {
-        ensure_running(&cancelled).map_err(|error| {
-            rollback_renames(&completed, &plans);
-            error
-        })?;
+    for index in 0..plans.len() {
+        if cancelled.load(Ordering::SeqCst) {
+            rollback_all_renames(&plans);
+            return Err("任务已取消".to_string());
+        }
+        let plan = &plans[index];
         let Some(temporary) = &plan.temporary else {
             continue;
         };
         if let Err(error) = fs::rename(temporary, &plan.target) {
-            rollback_renames(&completed, &plans);
-            for remaining in plans.iter().skip(index) {
-                if let Some(temp) = &remaining.temporary {
-                    if temp.exists() {
-                        let _ = fs::rename(temp, &remaining.source);
-                    }
-                }
-            }
+            rollback_all_renames(&plans);
             return Err(format!("写入新文件名 {} 失败：{error}", plan.target.display()));
         }
-        completed.push(index);
         send_progress(
             request,
             on_event,
-            progress(index + 1, plans.len().max(1), 65, 95),
+            progress(index + 1, total, 65, 95),
             format!("已写入 {}", plan.target_name),
             "info",
         );
@@ -681,19 +690,21 @@ fn execute_rename_plans(
     Ok(())
 }
 
-fn rollback_staged(staged: &[(PathBuf, PathBuf)]) {
-    for (temporary, source) in staged.iter().rev() {
-        if temporary.exists() {
-            let _ = fs::rename(temporary, source);
+fn rollback_all_renames(plans: &[RenamePlan]) {
+    for plan in plans.iter().rev() {
+        let Some(temporary) = &plan.temporary else {
+            continue;
+        };
+        if plan.target.exists() && !temporary.exists() {
+            let _ = fs::rename(&plan.target, temporary);
         }
     }
-}
-
-fn rollback_renames(completed: &[usize], plans: &[RenamePlan]) {
-    for index in completed.iter().rev() {
-        let plan = &plans[*index];
-        if plan.target.exists() {
-            let _ = fs::rename(&plan.target, &plan.source);
+    for plan in plans.iter().rev() {
+        let Some(temporary) = &plan.temporary else {
+            continue;
+        };
+        if temporary.exists() {
+            let _ = fs::rename(temporary, &plan.source);
         }
     }
 }
@@ -818,6 +829,12 @@ fn ensure_running(cancelled: &AtomicBool) -> Result<(), String> {
     }
 }
 
+async fn wait_for_cancellation(cancelled: Arc<AtomicBool>) {
+    while !cancelled.load(Ordering::SeqCst) {
+        sleep(Duration::from_millis(50)).await;
+    }
+}
+
 fn required_string(request: &ToolRunRequest, key: &str) -> Result<String, String> {
     string_param(request, key)
         .filter(|value| !value.trim().is_empty())
@@ -864,14 +881,14 @@ fn path_list_param(request: &ToolRunRequest, key: &str) -> Result<Vec<PathBuf>, 
             .filter_map(|value| value.as_str())
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
+            .map(|value| PathBuf::from(value).expand_home())
             .collect(),
         Some(Value::String(value)) => value
             .replace(';', "\n")
             .lines()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
+            .map(|value| PathBuf::from(value).expand_home())
             .collect(),
         Some(_) => return Err(format!("参数 {key} 必须是路径数组或多行文本。")),
         None => Vec::new(),
@@ -943,8 +960,8 @@ fn progress(current: usize, total: usize, start: u8, end: u8) -> u8 {
     if total == 0 {
         return end;
     }
-    let span = u16::from(end.saturating_sub(start));
-    let value = u16::from(start) + (current.min(total) as u16 * span / total as u16);
+    let span = u64::from(end.saturating_sub(start));
+    let value = u64::from(start) + (current.min(total) as u64 * span / total as u64);
     value.min(100) as u8
 }
 
@@ -999,13 +1016,21 @@ fn directory_artifact(label: impl Into<String>, path: &Path) -> Artifact {
 fn status_code(status: Status) -> &'static str {
     if status.is_conflicted() {
         "UU"
-    } else if status.intersects(Status::INDEX_NEW | Status::WT_NEW) {
+    } else if status.contains(Status::INDEX_NEW) {
+        "A "
+    } else if status.contains(Status::WT_NEW) {
         "??"
-    } else if status.intersects(Status::INDEX_DELETED | Status::WT_DELETED) {
+    } else if status.contains(Status::INDEX_DELETED) {
+        "D "
+    } else if status.contains(Status::WT_DELETED) {
         " D"
-    } else if status.intersects(Status::INDEX_RENAMED | Status::WT_RENAMED) {
+    } else if status.contains(Status::INDEX_RENAMED) {
+        "R "
+    } else if status.contains(Status::WT_RENAMED) {
         " R"
-    } else if status.intersects(Status::INDEX_MODIFIED | Status::WT_MODIFIED) {
+    } else if status.contains(Status::INDEX_MODIFIED) {
+        "M "
+    } else if status.contains(Status::WT_MODIFIED) {
         " M"
     } else {
         "  "
@@ -1029,7 +1054,7 @@ fn same_or_descendant(path: &Path, parent: &Path) -> bool {
     if cfg!(windows) {
         let path = path.to_string_lossy().to_lowercase();
         let parent = parent.to_string_lossy().to_lowercase();
-        path == parent || path.starts_with(&(parent + "\\")) || path.starts_with(&(parent + "/"))
+        path == parent || path.starts_with(&(parent.clone() + "\\")) || path.starts_with(&(parent + "/"))
     } else {
         path == parent || path.starts_with(parent)
     }
@@ -1046,7 +1071,9 @@ impl ExpandHome for PathBuf {
         };
         if value == "~" || value.starts_with("~/") || value.starts_with("~\\") {
             if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
-                let suffix = value.trim_start_matches('~').trim_start_matches(['/', '\\']);
+                let suffix = value
+                    .trim_start_matches('~')
+                    .trim_start_matches(|character| character == '/' || character == '\\');
                 return PathBuf::from(home).join(suffix);
             }
         }
