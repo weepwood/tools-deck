@@ -65,7 +65,7 @@ jobs:
         run: npm install
 
       - name: Test Rust execution layer
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: npm run desktop:test
 
       - name: Check Tauri application
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: npm run desktop:check
