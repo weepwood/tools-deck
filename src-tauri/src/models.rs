@@ -44,6 +44,7 @@ pub struct ToolRunRequest {
     pub tool_id: String,
     pub tool_name: String,
     pub runtime: RuntimeDefinition,
+    #[serde(default)]
     pub execution: ExecutionDefinition,
     pub params: HashMap<String, Value>,
 }
