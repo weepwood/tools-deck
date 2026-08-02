@@ -1,0 +1,50 @@
+name: Apply UI Redesign
+
+on:
+  push:
+    branches:
+      - feat/ui-workspace-redesign
+    paths:
+      - .github/workflows/apply-ui-redesign.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ui-workspace-redesign
+
+      - name: Assemble redesigned files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+
+          sources = {
+              'src/App.jsx': ['app-1.b64', 'app-2.b64', 'app-3.b64'],
+              'src/components/Icon.jsx': ['icon-1.b64'],
+              'src/styles.css': ['styles-1.b64', 'styles-2.b64'],
+              'src/enhancements.css': ['enh-1.b64'],
+          }
+          root = Path('.ui-redesign')
+          for target, chunks in sources.items():
+              encoded = ''.join((root / chunk).read_text(encoding='utf-8').strip() for chunk in chunks)
+              data = gzip.decompress(base64.b64decode(encoded))
+              output = Path(target)
+              output.parent.mkdir(parents=True, exist_ok=True)
+              output.write_bytes(data)
+          PY
+
+      - name: Commit redesign
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/App.jsx src/components/Icon.jsx src/styles.css src/enhancements.css
+          git commit -m "feat: 重构工具工作台前端界面"
+          git push origin HEAD:feat/ui-workspace-redesign
