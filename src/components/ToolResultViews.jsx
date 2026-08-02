@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import Icon from './Icon.jsx'
+import { readArtifactText } from '../runtime/artifactActions.js'
 
 const BATCH_STEPS = {
   'image-compressor': [
@@ -66,17 +68,96 @@ export function BatchStepRail({ tool, params, runState }) {
   )
 }
 
-function parseStructuredArtifact(artifacts, expectedKind) {
-  for (const artifact of artifacts ?? []) {
-    if (!artifact?.content || typeof artifact.content !== 'string') continue
-    try {
-      const parsed = JSON.parse(artifact.content)
-      if (parsed?.kind === expectedKind) return { artifact, data: parsed }
-    } catch {
-      // Normal file and text artifacts are not structured JSON payloads.
+function parseCsvLine(line) {
+  const cells = []
+  let value = ''
+  let quoted = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index]
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"'
+        index += 1
+      } else {
+        quoted = !quoted
+      }
+    } else if (character === ',' && !quoted) {
+      cells.push(value)
+      value = ''
+    } else {
+      value += character
     }
   }
-  return null
+  cells.push(value)
+  return cells
+}
+
+function parseHttpReport(content) {
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean)
+  if (lines.length < 2) return null
+  const headers = parseCsvLine(lines[0])
+  const rows = lines.slice(1).map((line) => {
+    const values = parseCsvLine(line)
+    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
+  }).map((row) => ({
+    url: row.url,
+    status: Number(row.status || 0),
+    durationMs: Number(row.duration_ms || 0),
+    finalUrl: row.final_url,
+    error: row.error,
+  }))
+  const success = rows.filter((row) => row.status >= 200 && row.status < 300).length
+  const redirects = rows.filter((row) => row.status >= 300 && row.status < 400).length
+  const failed = rows.length - success - redirects
+  const averageDurationMs = rows.length
+    ? rows.reduce((sum, row) => sum + row.durationMs, 0) / rows.length
+    : 0
+  return { kind: 'http-check', total: rows.length, success, redirects, failed, averageDurationMs, rows }
+}
+
+function codeBlock(content, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return content.match(new RegExp(`## ${escaped}\\s+\\x60\\x60\\x60text\\s*([\\s\\S]*?)\\x60\\x60\\x60`))?.[1]?.trim() ?? ''
+}
+
+function parseGitReport(content) {
+  const repository = content.match(/^- 仓库：(.+)$/m)?.[1]?.trim() ?? ''
+  const branch = content.match(/^- 当前分支：(.+)$/m)?.[1]?.trim() ?? 'DETACHED HEAD'
+  const staleDays = Number(content.match(/^- 过期分支阈值：(\d+) 天$/m)?.[1] ?? 90)
+  const statusText = codeBlock(content, '工作区状态')
+  const staleText = codeBlock(content, '过期本地分支')
+  const changed = statusText && statusText !== '工作区干净' ? statusText.split(/\r?\n/).filter(Boolean) : []
+  const staleBranches = staleText && staleText !== '无' ? staleText.split(/\r?\n/).filter(Boolean) : []
+  return { kind: 'git-audit', repository, branch, staleDays, clean: changed.length === 0, changed, staleBranches }
+}
+
+function useInspectionData(tool, artifacts) {
+  const [state, setState] = useState({ loading: false, data: null, error: '' })
+  const report = (artifacts ?? []).find((artifact) => artifact?.path && artifact.type === 'file')
+
+  useEffect(() => {
+    let active = true
+    if (!report?.path || !['http-batch-check', 'git-repo-audit'].includes(tool?.id)) {
+      setState({ loading: false, data: null, error: '' })
+      return () => { active = false }
+    }
+
+    setState({ loading: true, data: null, error: '' })
+    readArtifactText(report.path)
+      .then((content) => {
+        if (!active) return
+        const data = tool.id === 'http-batch-check' ? parseHttpReport(content) : parseGitReport(content)
+        setState({ loading: false, data, error: data ? '' : '报告内容为空。' })
+      })
+      .catch((error) => {
+        if (active) setState({ loading: false, data: null, error: error.message })
+      })
+
+    return () => { active = false }
+  }, [tool?.id, report?.path])
+
+  return state
 }
 
 function HttpStatus({ status }) {
@@ -149,15 +230,11 @@ function GitInspectionResult({ data }) {
 }
 
 export function InspectionResult({ tool, artifacts }) {
-  if (tool?.id === 'http-batch-check') {
-    const result = parseStructuredArtifact(artifacts, 'http-check')
-    return result ? <HttpInspectionResult data={result.data} /> : null
-  }
-  if (tool?.id === 'git-repo-audit') {
-    const result = parseStructuredArtifact(artifacts, 'git-audit')
-    return result ? <GitInspectionResult data={result.data} /> : null
-  }
-  return null
+  const { loading, data, error } = useInspectionData(tool, artifacts)
+  if (loading) return <section className="inspection-result inspection-loading"><Icon name="activity" /><span>正在读取检测报告…</span></section>
+  if (error) return <section className="inspection-result inspection-loading is-error"><Icon name="alert" /><span>{error}</span></section>
+  if (!data) return null
+  return data.kind === 'http-check' ? <HttpInspectionResult data={data} /> : <GitInspectionResult data={data} />
 }
 
 export function ArtifactList({ artifacts, desktop, onCopy, onOpen, onReveal }) {
