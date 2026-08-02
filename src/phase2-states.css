@@ -1,0 +1,23 @@
+.inspection-loading {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.inspection-loading svg {
+  color: var(--primary);
+}
+
+.inspection-loading.is-error {
+  color: #cf1322;
+  border-color: rgba(255, 77, 79, .25);
+  background: rgba(255, 77, 79, .04);
+}
+
+.inspection-loading.is-error svg {
+  color: #cf1322;
+}

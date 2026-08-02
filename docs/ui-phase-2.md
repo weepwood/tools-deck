@@ -1,3 +1,71 @@
-# Tools Deck UI Phase 2
+# Tools Deck UI 第二阶段
 
-This branch implements dedicated batch and inspection workspaces, structured native result payloads, and desktop artifact actions.
+第二阶段在第一阶段“首页、工具库、全宽工作区、任务中心”的基础上，进一步针对不同工具类型提供专用交互和结果展示。
+
+## 工作区模板
+
+工具工作区分为四种模板：
+
+- `text`：文本输入与输出双栏，例如 JSON 格式化。
+- `batch`：文件批处理步骤视图，例如图片压缩、文件重命名和 Excel 合并。
+- `inspection`：检测参数、统计摘要与明细结果，例如 HTTP 检测和 Git 巡检。
+- `form`：自定义工具和其他通用参数表单。
+
+模板只影响前端呈现，不改变工具清单格式、Rust IPC 或外部进程执行协议。
+
+## 批处理步骤
+
+图片压缩、文件批量重命名和 Excel 合并会显示四阶段步骤条：
+
+1. 选择输入数据。
+2. 配置处理参数。
+3. 执行 Rust 原生任务。
+4. 查看或打开输出产物。
+
+步骤状态根据必填参数和任务状态自动变化，不会复制一套新的任务状态。
+
+## 检测结果
+
+### HTTP 批量检测
+
+Rust 工具继续生成 CSV 报告。桌面端通过受控命令读取不超过 5 MB 的报告，并在前端计算和显示：
+
+- URL 总数、正常响应数、重定向数和失败数。
+- 平均响应时间。
+- 每个 URL 的状态码、耗时、最终地址和错误信息。
+
+CSV 文件仍是可下载、可打开的标准结果，界面表格只是对同一报告的可视化。
+
+### Git 仓库巡检
+
+Rust 工具继续生成 Markdown 报告。前端读取报告后显示：
+
+- 仓库路径和当前分支。
+- 工作区变更列表。
+- 长期未更新的本地分支。
+- 分支过期天数阈值。
+
+报告文件与可视化摘要保持同一数据来源。
+
+## 产物操作
+
+桌面端使用 Tools Deck 自己的 Rust 命令提供：
+
+- 使用系统默认应用打开文件或目录。
+- 在资源管理器或 Finder 中定位产物。
+- 复制产物本地路径。
+- 读取 CSV、Markdown、文本、JSON 和日志报告。
+
+读取命令要求目标路径存在，仅允许文本报告扩展名，并将单个文件限制在 5 MB 以内。Web 预览模式不会访问本地文件系统。
+
+## 兼容性
+
+- 保留 v0.4.0 的 LocalStorage 数据键。
+- 保留现有历史、收藏、预设和任务队列。
+- 保留 Python、Node.js、PowerShell、Shell 和可执行文件自定义工具协议。
+- 不增加新的 npm 或 Cargo 运行依赖。
+- Linux 继续参与 CI 编译检查，但不会恢复 Linux Release 安装包。
+
+## 验证
+
+实现完成后将通过 Web 构建、Rust 单元测试、Windows/macOS/Linux Tauri 检查，以及 Windows/macOS 安装包构建。

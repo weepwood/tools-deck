@@ -1,3 +1,4 @@
+mod artifact_runtime;
 mod builtin_runtime;
 mod builtins;
 mod execution;
@@ -18,6 +19,9 @@ pub fn run() {
             execution::cancel_tool,
             builtin_runtime::run_builtin_tool,
             builtin_runtime::cancel_builtin,
+            artifact_runtime::open_artifact_path,
+            artifact_runtime::reveal_artifact_path,
+            artifact_runtime::read_artifact_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tools Deck");
