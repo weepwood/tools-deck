@@ -5,10 +5,22 @@ on:
     branches: [main]
     paths:
       - .github/workflows/release.yml
+      - package.json
+      - package-lock.json
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - src-tauri/tauri.conf.json
+      - CHANGELOG.md
   push:
     branches: [main]
     paths:
       - .github/workflows/release.yml
+      - package.json
+      - package-lock.json
+      - src-tauri/Cargo.toml
+      - src-tauri/Cargo.lock
+      - src-tauri/tauri.conf.json
+      - CHANGELOG.md
   workflow_dispatch:
 
 permissions:
