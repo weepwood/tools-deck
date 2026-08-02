@@ -1,8 +1,10 @@
 export const TOOL_CATEGORIES = ['file', 'image', 'data', 'network', 'developer']
 export const RUNTIME_TYPES = ['python', 'node', 'shell', 'powershell', 'executable', 'http', 'builtin', 'custom']
 export const PARAMETER_TYPES = ['text', 'number', 'boolean', 'range', 'textarea', 'select', 'directory', 'files']
+export const PROCESS_RUNTIME_TYPES = ['python', 'node', 'shell', 'powershell', 'executable']
 
 const idPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const envKeyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -25,6 +27,22 @@ function normalizeParameter(parameter, index) {
   }
 
   return normalized
+}
+
+function normalizeExecution(value) {
+  if (!isPlainObject(value)) return null
+  return {
+    ...value,
+    entry: String(value.entry ?? '').trim(),
+    args: Array.isArray(value.args) ? value.args.map((arg) => String(arg)) : [],
+    cwd: value.cwd == null ? undefined : String(value.cwd),
+    env: isPlainObject(value.env)
+      ? Object.fromEntries(Object.entries(value.env).map(([key, item]) => [key, String(item)]))
+      : {},
+    timeoutSeconds: value.timeoutSeconds == null ? 3600 : Number(value.timeoutSeconds),
+    argumentStringParam: value.argumentStringParam == null ? undefined : String(value.argumentStringParam),
+    allowNonZeroExit: Boolean(value.allowNonZeroExit),
+  }
 }
 
 export function validateToolManifest(input, { existingIds = [] } = {}) {
@@ -82,6 +100,23 @@ export function validateToolManifest(input, { existingIds = [] } = {}) {
     errors.push(`运行时类型「${runtimeType}」不受支持。`)
   }
 
+  const execution = normalizeExecution(input.execution)
+  if (PROCESS_RUNTIME_TYPES.includes(runtimeType)) {
+    if (!execution?.entry) errors.push(`${runtimeType} 工具必须配置 execution.entry。`)
+    if (input.execution?.args !== undefined && !Array.isArray(input.execution.args)) {
+      errors.push('execution.args 必须是字符串数组。')
+    }
+    if (execution && (!Number.isFinite(execution.timeoutSeconds) || execution.timeoutSeconds < 1 || execution.timeoutSeconds > 86400)) {
+      errors.push('execution.timeoutSeconds 必须是 1 到 86400 之间的数字。')
+    }
+    for (const key of Object.keys(execution?.env ?? {})) {
+      if (!envKeyPattern.test(key)) errors.push(`环境变量名称不合法：${key}`)
+    }
+    if (execution?.argumentStringParam && !parameterKeys.has(execution.argumentStringParam)) {
+      errors.push(`execution.argumentStringParam 引用了不存在的参数：${execution.argumentStringParam}`)
+    }
+  }
+
   const tags = Array.isArray(input.tags)
     ? input.tags.map((tag) => String(tag).trim()).filter(Boolean)
     : ['自定义']
@@ -102,8 +137,9 @@ export function validateToolManifest(input, { existingIds = [] } = {}) {
       ...runtime,
       type: runtimeType,
       label: String(runtime.label ?? (runtimeType === 'custom' ? '自定义运行时' : runtimeType)),
-      status: String(runtime.status ?? (runtimeType === 'builtin' ? 'ready' : 'setup')),
+      status: String(runtime.status ?? (runtimeType === 'builtin' || execution?.entry ? 'ready' : 'setup')),
     },
+    ...(execution ? { execution } : {}),
   }
 
   return { valid: errors.length === 0, errors, manifest: errors.length ? null : manifest }
@@ -119,6 +155,7 @@ export function serializeToolManifest(tool) {
     accent: tool.accent,
     tags: tool.tags,
     runtime: tool.runtime,
+    execution: tool.execution,
     parameters: tool.parameters,
     output: tool.output,
   }
