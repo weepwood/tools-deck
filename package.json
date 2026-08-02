@@ -13,12 +13,13 @@
     "desktop:build": "npm run desktop:icons && tauri build",
     "desktop:test": "npm run desktop:icons && cargo test --manifest-path src-tauri/Cargo.toml",
     "desktop:check": "npm run desktop:icons && cargo check --manifest-path src-tauri/Cargo.toml",
-    "check": "node --check vite.config.js && node --check src/data/tools.js && node --check src/domain/manifest.js && node --check src/hooks/useLocalStorage.js && node --check src/runtime/runtime.js && node --check src/runtime/nativePaths.js",
+    "check": "node --check vite.config.js && node --check src/data/tools.js && node --check src/domain/manifest.js && node --check src/hooks/useLocalStorage.js && node --check src/runtime/runtime.js && node --check src/runtime/nativePaths.js && node --check src/runtime/artifactActions.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/plugin-opener": "2.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
