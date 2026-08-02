@@ -54,6 +54,13 @@ function normalizeError(error) {
   return '桌面运行时执行失败'
 }
 
+function normalizeDesktopRuntime(tool) {
+  if (tool.id === 'git-repo-audit' && tool.runtime.type === 'shell') {
+    return { ...tool.runtime, type: 'powershell', label: 'PowerShell' }
+  }
+  return tool.runtime
+}
+
 async function runJsonFormatter({ params, onProgress, signal }) {
   const startedAt = Date.now()
   const progress = async (value, message) => {
@@ -104,6 +111,7 @@ async function runDesktop({ tool, params, onProgress, signal }) {
   const runId = createRunId()
   const artifacts = []
   const execution = tool.execution ?? desktopExecutionDefaults[tool.id]
+  const runtime = normalizeDesktopRuntime(tool)
 
   if (!execution) {
     throw new Error(`工具「${tool.name}」缺少 execution 配置。`)
@@ -148,7 +156,7 @@ async function runDesktop({ tool, params, onProgress, signal }) {
         runId,
         toolId: tool.id,
         toolName: tool.name,
-        runtime: tool.runtime,
+        runtime,
         execution,
         params,
       },
