@@ -20,26 +20,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+          cache: npm
 
       - name: Install frontend dependencies
-        run: npm install
-
-      - name: Install built-in tool dependencies
-        run: python -m pip install Pillow openpyxl
+        run: npm ci
 
       - name: Check JavaScript
         run: npm run check
 
       - name: Test JavaScript
         run: npm test
-
-      - name: Test built-in Python tools
-        run: python -m unittest discover tools/builtin/tests
 
       - name: Build web application
         run: npm run build
@@ -76,11 +66,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Test Rust execution layer
+      - name: Test Rust execution layer and native tools
         run: npm run desktop:test
 
       - name: Check Tauri application
