@@ -2,7 +2,7 @@
   "name": "tools-deck",
   "private": true,
   "version": "0.4.0",
-  "description": "A native desktop workbench for local tools and scripts",
+  "description": "Native desktop workbench for local tools and scripts",
   "type": "module",
   "scripts": {
     "dev": "vite --port 1420",
