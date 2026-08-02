@@ -60,3 +60,16 @@ test('serializes only portable manifest fields', () => {
   assert.equal(output.includes('internalState'), false)
   assert.equal(output.endsWith('\n'), true)
 })
+
+test('rejects non-object parameters without throwing', () => {
+  const result = validateToolManifest({
+    id: 'broken-tool',
+    name: '异常工具',
+    category: 'developer',
+    tags: 'not-an-array',
+    parameters: [null],
+  })
+
+  assert.equal(result.valid, false)
+  assert.match(result.errors.join('\n'), /必须是对象/)
+})
