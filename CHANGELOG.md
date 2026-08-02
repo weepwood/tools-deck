@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0] - 2026-08-02
+
+### Changed
+
+- 图片压缩、文件重命名、Excel 合并、HTTP 检测、Git 巡检和 JSON 格式化全部迁移到 Rust 原生实现。
+- 应用自带工具不再依赖 Python、Pillow、openpyxl、Node.js、PowerShell 脚本或 Git 命令行。
+- 外部 Python、Node.js、PowerShell、Shell 和可执行文件运行时仅用于用户导入的自定义工具。
+- 安装包不再携带 `.py`、`.mjs` 和 `.ps1` 内置脚本资源。
+
+### Added
+
+- 原生内置任务注册表和取消机制。
+- 基于 `image` 的图片重新编码。
+- 基于 `calamine` 与 `rust_xlsxwriter` 的 Excel 读取和流式写入。
+- 基于 `reqwest` 的并发 HTTP 检测。
+- 基于 `libgit2` 的 Git 工作区与分支巡检。
+- 原生工具参数、CSV、JSON 和路径处理单元测试。
+
+### Fixed
+
+- 文件批量重命名在失败或取消时执行回滚。
+- Excel 数据行的来源文件列固定写入表头之后，避免短行造成列错位。
+- HTTP 请求在任务取消后主动停止等待。
+
 ## [0.3.0] - 2026-08-02
 
 ### Added
