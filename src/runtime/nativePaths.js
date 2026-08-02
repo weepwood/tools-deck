@@ -6,8 +6,8 @@ function setReactInputValue(input, value) {
   input.dispatchEvent(new Event('change', { bubbles: true }))
 }
 
-function shouldSelectDirectory(label) {
-  return /文件夹|目录|仓库/.test(label)
+export function getPathSelectionType(container) {
+  return container?.querySelector('svg[data-icon]')?.dataset.icon === 'file' ? 'files' : 'directory'
 }
 
 export function installNativePathPicker() {
@@ -21,7 +21,7 @@ export function installNativePathPicker() {
 
     const container = button.closest('.path-input')
     const input = container?.querySelector('input')
-    const label = button.closest('label')?.querySelector(':scope > span')?.textContent ?? ''
+    const label = button.closest('label')?.querySelector(':scope > span')?.textContent ?? '路径'
     if (!(input instanceof HTMLInputElement)) return
 
     event.preventDefault()
@@ -30,9 +30,9 @@ export function installNativePathPicker() {
 
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
-      const directory = shouldSelectDirectory(label)
+      const selectionType = getPathSelectionType(container)
       const selected = await open(
-        directory
+        selectionType === 'directory'
           ? { directory: true, multiple: false, title: `选择${label}` }
           : { directory: false, multiple: true, title: `选择${label}` },
       )
