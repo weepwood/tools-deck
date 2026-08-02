@@ -484,7 +484,7 @@ fn run_git_audit(
     let branch = repository
         .head()
         .ok()
-        .and_then(|head| head.shorthand().map(str::to_string))
+        .and_then(|head| head.shorthand().ok().map(str::to_string))
         .unwrap_or_else(|| "DETACHED HEAD".to_string());
 
     let mut options = StatusOptions::new();
@@ -498,7 +498,7 @@ fn run_git_audit(
     let mut changed = statuses
         .iter()
         .filter_map(|entry| {
-            let path = entry.path()?.to_string();
+            let path = entry.path().ok()?.to_string();
             Some(format!("{}  {}", status_code(entry.status()), path))
         })
         .collect::<Vec<_>>();
@@ -646,22 +646,24 @@ fn execute_rename_plans(
             rollback_all_renames(&plans);
             return Err("任务已取消".to_string());
         }
-        let plan = &mut plans[index];
-        rows.push((file_name(&plan.source), plan.target_name.clone(), "renamed"));
-        if same_path(&plan.source, &plan.target) {
+        let source = plans[index].source.clone();
+        let target = plans[index].target.clone();
+        let target_name = plans[index].target_name.clone();
+        rows.push((file_name(&source), target_name, "renamed"));
+        if same_path(&source, &target) {
             continue;
         }
-        let temporary = unique_temporary_path(&plan.source, &request.run_id, index)?;
-        if let Err(error) = fs::rename(&plan.source, &temporary) {
+        let temporary = unique_temporary_path(&source, &request.run_id, index)?;
+        if let Err(error) = fs::rename(&source, &temporary) {
             rollback_all_renames(&plans);
-            return Err(format!("暂存文件 {} 失败：{error}", plan.source.display()));
+            return Err(format!("暂存文件 {} 失败：{error}", source.display()));
         }
-        plan.temporary = Some(temporary);
+        plans[index].temporary = Some(temporary);
         send_progress(
             request,
             on_event,
             progress(index + 1, total, 5, 65),
-            format!("准备重命名 {}", file_name(&plan.source)),
+            format!("准备重命名 {}", file_name(&source)),
             "info",
         );
     }
