@@ -1,5 +1,28 @@
 const delay = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms))
 
+const desktopExecutionDefaults = {
+  'image-compressor': {
+    entry: 'tools/builtin/image-compressor.py',
+    timeoutSeconds: 3600,
+  },
+  'batch-renamer': {
+    entry: 'tools/builtin/batch-renamer.mjs',
+    timeoutSeconds: 1800,
+  },
+  'excel-merger': {
+    entry: 'tools/builtin/excel-merger.py',
+    timeoutSeconds: 3600,
+  },
+  'http-batch-check': {
+    entry: 'tools/builtin/http-batch-check.py',
+    timeoutSeconds: 1800,
+  },
+  'git-repo-audit': {
+    entry: 'tools/builtin/git-repo-audit.ps1',
+    timeoutSeconds: 900,
+  },
+}
+
 const buildSteps = (tool, params) => [
   `正在检查 ${tool.runtime.label} 运行环境`,
   `正在校验 ${Object.keys(params).length} 个参数`,
@@ -19,6 +42,16 @@ function sortJson(value) {
       result[key] = sortJson(value[key])
       return result
     }, {})
+}
+
+function createRunId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function normalizeError(error) {
+  if (typeof error === 'string') return error
+  if (error?.message) return error.message
+  return '桌面运行时执行失败'
 }
 
 async function runJsonFormatter({ params, onProgress, signal }) {
@@ -66,6 +99,85 @@ async function runPreview({ tool, params, onProgress, signal }) {
   }
 }
 
+async function runDesktop({ tool, params, onProgress, signal }) {
+  const { invoke, Channel } = await import('@tauri-apps/api/core')
+  const runId = createRunId()
+  const artifacts = []
+  const execution = tool.execution ?? desktopExecutionDefaults[tool.id]
+
+  if (!execution) {
+    throw new Error(`工具「${tool.name}」缺少 execution 配置。`)
+  }
+
+  const onEvent = new Channel()
+  onEvent.onmessage = (event) => {
+    if (!event || event.runId !== runId) return
+
+    if (event.event === 'started') {
+      onProgress({ progress: 5, message: event.message, level: 'info' })
+    } else if (event.event === 'output') {
+      onProgress({
+        progress: event.progress ?? 50,
+        message: event.line,
+        level: event.stream === 'stderr' ? 'warning' : 'info',
+      })
+    } else if (event.event === 'progress') {
+      onProgress({
+        progress: event.progress,
+        message: event.message,
+        level: event.level ?? 'info',
+      })
+    } else if (event.event === 'artifact') {
+      artifacts.push(event.artifact)
+      onProgress({
+        progress: event.progress ?? 90,
+        message: `已生成：${event.artifact.label}`,
+        level: 'success',
+      })
+    }
+  }
+
+  const abortHandler = () => {
+    invoke('cancel_tool', { runId }).catch(() => {})
+  }
+  signal.addEventListener('abort', abortHandler, { once: true })
+
+  try {
+    const result = await invoke('run_tool', {
+      request: {
+        runId,
+        toolId: tool.id,
+        toolName: tool.name,
+        runtime: tool.runtime,
+        execution,
+        params,
+      },
+      onEvent,
+    })
+
+    if (signal.aborted || result.status === 'cancelled') {
+      throw new DOMException('任务已取消', 'AbortError')
+    }
+
+    return {
+      ...result,
+      artifacts: [...(result.artifacts ?? []), ...artifacts],
+    }
+  } catch (error) {
+    if (signal.aborted || error?.name === 'AbortError') {
+      throw new DOMException('任务已取消', 'AbortError')
+    }
+    throw new Error(normalizeError(error))
+  } finally {
+    signal.removeEventListener('abort', abortHandler)
+  }
+}
+
+async function detectDesktopRuntimes() {
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke('detect_runtimes')
+}
+
 export function createRuntime() {
   const isDesktop = Boolean(globalThis.__TAURI_INTERNALS__)
 
@@ -76,7 +188,10 @@ export function createRuntime() {
         return runJsonFormatter(context)
       }
 
-      return runPreview(context)
+      return isDesktop ? runDesktop(context) : runPreview(context)
+    },
+    async detectRuntimes() {
+      return isDesktop ? detectDesktopRuntimes() : []
     },
   }
 }
