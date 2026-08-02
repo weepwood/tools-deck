@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tools Deck",
+  "version": "0.3.0",
+  "identifier": "com.weepwood.toolsdeck",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tools Deck",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 980,
+        "minHeight": 680,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "capabilities": ["desktop"],
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../tools/builtin/image-compressor.py": "tools/builtin/image-compressor.py",
+      "../tools/builtin/batch-renamer.mjs": "tools/builtin/batch-renamer.mjs",
+      "../tools/builtin/excel-merger.py": "tools/builtin/excel-merger.py",
+      "../tools/builtin/http-batch-check.py": "tools/builtin/http-batch-check.py",
+      "../tools/builtin/git-repo-audit.ps1": "tools/builtin/git-repo-audit.ps1"
+    },
+    "category": "Utility",
+    "shortDescription": "个人脚本工具库",
+    "longDescription": "将 Python、Node.js、PowerShell、Shell 与可执行程序封装为可配置、可运行的桌面工具。"
+  }
+}
