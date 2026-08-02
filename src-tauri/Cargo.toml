@@ -1,10 +1,10 @@
 [package]
 name = "tools-deck"
-version = "0.3.0"
+version = "0.4.0"
 description = "A personal script toolbox"
 authors = ["weepwood"]
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.85.0"
 publish = false
 
 [lib]
@@ -15,9 +15,17 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+calamine = "0.36"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+futures-util = "0.3"
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+rust_xlsxwriter = { version = "0.96", features = ["constant_memory"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shell-words = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["io-util", "macros", "process", "sync", "time"] }
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+walkdir = "2.5"
