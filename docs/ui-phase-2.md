@@ -64,3 +64,7 @@ Web 预览模式不会尝试访问本地文件系统。Tauri capability 只授�
 - 保留现有历史、收藏、预设和任务队列。
 - 保留 Python、Node.js、PowerShell、Shell 和可执行文件自定义工具协议。
 - Linux 继续参与 CI 编译检查，但不会恢复 Linux Release 安装包。
+
+## 验证
+
+实现完成后将通过 Web 构建、Rust 单元测试、Windows/macOS/Linux Tauri 检查，以及 Windows/macOS 安装包构建。
