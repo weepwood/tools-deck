@@ -10,6 +10,7 @@ use execution::ProcessRegistry;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(ProcessRegistry::default())
         .manage(BuiltinRegistry::default())
         .invoke_handler(tauri::generate_handler![
