@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  web:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,6 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm install
@@ -27,8 +28,46 @@ jobs:
       - name: Check JavaScript
         run: npm run check
 
-      - name: Test
+      - name: Test JavaScript
         run: npm test
 
-      - name: Build
+      - name: Build web application
         run: npm run build
+
+  desktop:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Test Rust execution layer
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Check Tauri application
+        run: cargo check --manifest-path src-tauri/Cargo.toml
