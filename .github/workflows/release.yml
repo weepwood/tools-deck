@@ -24,7 +24,7 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       tag: ${{ steps.metadata.outputs.tag }}
-      should-build: ${{ steps.metadata.outputs.should-build }}
+      should_build: ${{ steps.metadata.outputs.should_build }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,16 +39,16 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
           elif gh release view "$TAG" >/dev/null 2>&1; then
-            echo "should-build=false" >> "$GITHUB_OUTPUT"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
           else
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
           fi
 
   build:
     needs: prepare
-    if: needs.prepare.outputs.should-build == 'true'
+    if: needs.prepare.outputs.should_build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -109,7 +109,7 @@ jobs:
 
   release:
     needs: [prepare, build]
-    if: github.event_name != 'pull_request' && needs.prepare.outputs.should-build == 'true'
+    if: github.event_name != 'pull_request' && needs.prepare.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -127,7 +127,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           awk -v version="$VERSION" '
-            $0 == "## [" version "] - 2026-08-02" { found=1; next }
+            index($0, "## [" version "]") == 1 { found=1; next }
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
