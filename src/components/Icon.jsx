@@ -37,6 +37,7 @@ export default function Icon({ name, size = 18, className = '' }) {
     <svg
       aria-hidden="true"
       className={className}
+      data-icon={name}
       width={size}
       height={size}
       viewBox="0 0 24 24"
