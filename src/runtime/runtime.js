@@ -1,30 +1,7 @@
 const delay = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms))
 
-const desktopExecutionDefaults = {
-  'image-compressor': {
-    entry: 'tools/builtin/image-compressor.py',
-    timeoutSeconds: 3600,
-  },
-  'batch-renamer': {
-    entry: 'tools/builtin/batch-renamer.mjs',
-    timeoutSeconds: 1800,
-  },
-  'excel-merger': {
-    entry: 'tools/builtin/excel-merger.py',
-    timeoutSeconds: 3600,
-  },
-  'http-batch-check': {
-    entry: 'tools/builtin/http-batch-check.py',
-    timeoutSeconds: 1800,
-  },
-  'git-repo-audit': {
-    entry: 'tools/builtin/git-repo-audit.ps1',
-    timeoutSeconds: 900,
-  },
-}
-
 const buildSteps = (tool, params) => [
-  `正在检查 ${tool.runtime.label} 运行环境`,
+  `正在准备 ${tool.runtime.label}`,
   `正在校验 ${Object.keys(params).length} 个参数`,
   '正在准备临时工作目录',
   `正在启动 ${tool.name}`,
@@ -54,11 +31,14 @@ function normalizeError(error) {
   return '桌面运行时执行失败'
 }
 
-function normalizeDesktopRuntime(tool) {
-  if (tool.id === 'git-repo-audit' && tool.runtime.type === 'shell') {
-    return { ...tool.runtime, type: 'powershell', label: 'PowerShell' }
-  }
-  return tool.runtime
+function mergeArtifacts(...groups) {
+  const seen = new Set()
+  return groups.flat().filter((artifact) => {
+    const key = [artifact?.type, artifact?.label, artifact?.path, artifact?.content].join('|')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 async function runJsonFormatter({ params, onProgress, signal }) {
@@ -109,12 +89,12 @@ async function runPreview({ tool, params, onProgress, signal }) {
 async function runDesktop({ tool, params, onProgress, signal }) {
   const { invoke, Channel } = await import('@tauri-apps/api/core')
   const runId = createRunId()
-  const artifacts = []
-  const execution = tool.execution ?? desktopExecutionDefaults[tool.id]
-  const runtime = normalizeDesktopRuntime(tool)
+  const eventArtifacts = []
+  const builtin = tool.runtime.type === 'builtin'
+  const execution = tool.execution ?? {}
 
-  if (!execution) {
-    throw new Error(`工具「${tool.name}」缺少 execution 配置。`)
+  if (!builtin && !execution.entry) {
+    throw new Error(`工具「${tool.name}」缺少 execution.entry 配置。`)
   }
 
   const onEvent = new Channel()
@@ -136,7 +116,7 @@ async function runDesktop({ tool, params, onProgress, signal }) {
         level: event.level ?? 'info',
       })
     } else if (event.event === 'artifact') {
-      artifacts.push(event.artifact)
+      eventArtifacts.push(event.artifact)
       onProgress({
         progress: event.progress ?? 90,
         message: `已生成：${event.artifact.label}`,
@@ -145,18 +125,20 @@ async function runDesktop({ tool, params, onProgress, signal }) {
     }
   }
 
+  const cancelCommand = builtin ? 'cancel_builtin' : 'cancel_tool'
   const abortHandler = () => {
-    invoke('cancel_tool', { runId }).catch(() => {})
+    invoke(cancelCommand, { runId }).catch(() => {})
   }
   signal.addEventListener('abort', abortHandler, { once: true })
 
   try {
-    const result = await invoke('run_tool', {
+    const command = builtin ? 'run_builtin_tool' : 'run_tool'
+    const result = await invoke(command, {
       request: {
         runId,
         toolId: tool.id,
         toolName: tool.name,
-        runtime,
+        runtime: tool.runtime,
         execution,
         params,
       },
@@ -169,7 +151,7 @@ async function runDesktop({ tool, params, onProgress, signal }) {
 
     return {
       ...result,
-      artifacts: [...(result.artifacts ?? []), ...artifacts],
+      artifacts: mergeArtifacts(result.artifacts ?? [], eventArtifacts),
     }
   } catch (error) {
     if (signal.aborted || error?.name === 'AbortError') {
@@ -192,11 +174,14 @@ export function createRuntime() {
   return {
     mode: isDesktop ? 'desktop' : 'preview',
     async run(context) {
-      if (context.tool.runtime.type === 'builtin' && context.tool.id === 'json-formatter') {
-        return runJsonFormatter(context)
+      if (!isDesktop) {
+        if (context.tool.runtime.type === 'builtin' && context.tool.id === 'json-formatter') {
+          return runJsonFormatter(context)
+        }
+        return runPreview(context)
       }
 
-      return isDesktop ? runDesktop(context) : runPreview(context)
+      return runDesktop(context)
     },
     async detectRuntimes() {
       return isDesktop ? detectDesktopRuntimes() : []
