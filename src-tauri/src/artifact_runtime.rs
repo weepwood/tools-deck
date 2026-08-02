@@ -66,9 +66,8 @@ fn canonical_existing_path(value: &str) -> Result<PathBuf, String> {
 fn open_command(path: &Path) -> Result<Command, String> {
     #[cfg(target_os = "windows")]
     {
-        let mut command = Command::new("cmd.exe");
-        command.args(["/D", "/S", "/C", "start", ""]);
-        command.arg(path);
+        let mut command = Command::new("rundll32.exe");
+        command.arg("url.dll,FileProtocolHandler").arg(path);
         return Ok(command);
     }
 
