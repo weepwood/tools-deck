@@ -1,6 +1,6 @@
 [package]
 name = "tools-deck"
-version = "0.4.0"
+version = "0.5.0"
 description = "A personal script toolbox"
 authors = ["weepwood"]
 edition = "2021"
