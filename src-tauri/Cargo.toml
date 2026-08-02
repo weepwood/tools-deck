@@ -1,0 +1,23 @@
+[package]
+name = "tools-deck"
+version = "0.3.0"
+description = "A personal script toolbox"
+authors = ["weepwood"]
+edition = "2021"
+rust-version = "1.77.2"
+publish = false
+
+[lib]
+name = "tools_deck_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+shell-words = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["io-util", "macros", "process", "sync", "time"] }
