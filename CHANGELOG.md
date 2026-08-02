@@ -8,6 +8,7 @@
 - 取消永久右侧详情面板，复杂参数、结果与日志拥有完整工作空间。
 - 图片压缩、文件重命名和 Excel 合并使用步骤式批处理界面。
 - HTTP 检测与 Git 巡检使用专用检测结果界面。
+- Release 下载仅提供 Windows x64 与 macOS Apple Silicon；Linux 保留 CI 兼容性检查，不生成安装包。
 
 ### Added
 
