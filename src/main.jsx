@@ -4,6 +4,7 @@ import App from './App.jsx'
 import { installNativePathPicker } from './runtime/nativePaths.js'
 import './styles.css'
 import './enhancements.css'
+import './phase2.css'
 
 installNativePathPicker()
 
