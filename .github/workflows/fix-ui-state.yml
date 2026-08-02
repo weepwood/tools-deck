@@ -1,0 +1,132 @@
+name: Fix UI State
+
+on:
+  push:
+    branches:
+      - feat/ui-workspace-redesign
+    paths:
+      - .github/workflows/fix-ui-state.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ui-workspace-redesign
+
+      - name: Apply review fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+            (
+              """    setLogs([])
+              setRunState(null)
+            }, [selectedTool?.id])""",
+              """    if (runState?.status !== 'running') {
+              setLogs([])
+              setRunState(null)
+            }
+            }, [selectedTool?.id])""",
+            ),
+            (
+              """    if (nextParams) restoreRef.current = { toolId: tool.id, params: nextParams }
+              setSelectedId(tool.id)""",
+              """    if (nextParams) {
+              if (selectedId === tool.id) setParams(cloneValue(nextParams))
+              else restoreRef.current = { toolId: tool.id, params: nextParams }
+            }
+            setSelectedId(tool.id)""",
+            ),
+            (
+              """    if (!selectedTool || !validateParams(selectedTool, params) || runState?.status === 'running') return""",
+              """    if (!selectedTool || !validateParams(selectedTool, params) || runState?.status === 'running') return
+            if (queueRunning) {
+              notify('任务队列正在运行，请先停止队列')
+              return
+            }""",
+            ),
+            (
+              """    if (queueRunning) return
+            const tasks = queue.filter((item) => item.status === 'pending')""",
+              """    if (queueRunning) return
+            if (runState?.status === 'running') {
+              notify('当前工具正在运行，请等待完成或先停止任务')
+              return
+            }
+            const tasks = queue.filter((item) => item.status === 'pending')""",
+            ),
+            (
+              """  const restoreHistory = (record) => {
+              const tool = tools.find((item) => item.id === record.toolId)
+              openTool(tool, record.params ?? getDefaultParams(tool))
+            }""",
+              """  const restoreHistory = (record) => {
+              const tool = tools.find((item) => item.id === record.toolId)
+              if (!tool) {
+                notify('对应工具已不存在')
+                return
+              }
+              openTool(tool, record.params ?? getDefaultParams(tool))
+            }""",
+            ),
+            (
+              """  const latestRecord = history[0]
+
+            return (""",
+              """  const latestRecord = history[0]
+            const selectedRunState = runState?.toolId === selectedTool?.id ? runState : null
+            const selectedLogs = runState?.toolId === selectedTool?.id ? logs : []
+            const activeRunTool = tools.find((tool) => tool.id === runState?.toolId) ?? selectedTool
+
+            return (""",
+            ),
+            (
+              """            runState={runState}
+              logs={logs}
+              runtimeMode={runtime.mode}""",
+              """            runState={selectedRunState}
+              logs={selectedLogs}
+              runtimeMode={runtime.mode}""",
+            ),
+            (
+              """        selectedTool={selectedTool}
+              queueRunning={queueRunning}""",
+              """        selectedTool={activeRunTool}
+              queueRunning={queueRunning}""",
+            ),
+            (
+              """              <button className=\"secondary-button\" onClick={() => onRestore(latestRecord)}>继续配置</button>
+              <button className=\"primary-button\" onClick={() => onRestore(latestRecord)}><Icon name=\"play\" />再次运行</button>""",
+              """              <button className=\"primary-button\" onClick={() => onRestore(latestRecord)}><Icon name=\"sliders\" />恢复参数</button>""",
+            ),
+            (
+              """          {activeItems.some((item) => item.status === 'pending') && !queueRunning ? <button className=\"primary-button\" onClick={onRunQueue}><Icon name=\"play\" />运行等待任务</button> : null}""",
+              """          {activeItems.some((item) => item.status === 'pending') && !queueRunning && runState?.status !== 'running' ? <button className=\"primary-button\" onClick={onRunQueue}><Icon name=\"play\" />运行等待任务</button> : null}""",
+            ),
+          ]
+
+          for old, new in replacements:
+            if old not in text:
+              raise SystemExit(f'Expected snippet not found: {old[:100]!r}')
+            text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/fix-ui-state.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: 隔离工作区与任务队列运行状态"
+          git push origin HEAD:feat/ui-workspace-redesign
