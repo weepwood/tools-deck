@@ -5,24 +5,32 @@ function assertPath(path) {
   return path.trim()
 }
 
+function assertDesktop() {
+  if (!globalThis.__TAURI_INTERNALS__) {
+    throw new Error('Web 预览模式无法访问本地产物。')
+  }
+}
+
+async function invoke(command, payload) {
+  const { invoke: tauriInvoke } = await import('@tauri-apps/api/core')
+  return tauriInvoke(command, payload)
+}
+
 export function canOpenArtifacts() {
   return Boolean(globalThis.__TAURI_INTERNALS__)
 }
 
 export async function openArtifactPath(path) {
-  const target = assertPath(path)
-  if (!canOpenArtifacts()) {
-    throw new Error('Web 预览模式无法打开本地文件。')
-  }
-  const { openPath } = await import('@tauri-apps/plugin-opener')
-  await openPath(target)
+  assertDesktop()
+  return invoke('open_artifact_path', { path: assertPath(path) })
 }
 
 export async function revealArtifactPath(path) {
-  const target = assertPath(path)
-  if (!canOpenArtifacts()) {
-    throw new Error('Web 预览模式无法定位本地文件。')
-  }
-  const { revealItemInDir } = await import('@tauri-apps/plugin-opener')
-  await revealItemInDir(target)
+  assertDesktop()
+  return invoke('reveal_artifact_path', { path: assertPath(path) })
+}
+
+export async function readArtifactText(path) {
+  assertDesktop()
+  return invoke('read_artifact_text', { path: assertPath(path) })
 }
