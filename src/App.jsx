@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './components/Icon.jsx'
+import { ArtifactList, BatchStepRail, InspectionResult, getWorkspaceTemplate } from './components/ToolResultViews.jsx'
 import { categories, initialTools } from './data/tools.js'
 import { validateToolManifest, serializeToolManifest } from './domain/manifest.js'
 import { useLocalStorage } from './hooks/useLocalStorage.js'
+import { canOpenArtifacts, openArtifactPath, revealArtifactPath } from './runtime/artifactActions.js'
 import { createRuntime } from './runtime/runtime.js'
 
 const runtime = createRuntime()
@@ -189,6 +191,22 @@ function App() {
   })
 
   const notify = (message) => setToast(message)
+
+  const openArtifact = async (artifact) => {
+    try {
+      await openArtifactPath(artifact.path)
+    } catch (error) {
+      notify(error.message)
+    }
+  }
+
+  const revealArtifact = async (artifact) => {
+    try {
+      await revealArtifactPath(artifact.path)
+    } catch (error) {
+      notify(error.message)
+    }
+  }
 
   const navigate = (nextPage) => {
     setPage(nextPage)
@@ -518,6 +536,9 @@ function App() {
               await copyText(content)
               notify('已复制到剪贴板')
             }}
+            desktopArtifacts={canOpenArtifacts()}
+            onOpenArtifact={openArtifact}
+            onRevealArtifact={revealArtifact}
           />
         )}
 
@@ -817,10 +838,11 @@ function LibraryView({ tools, favorites, category, search, mode, onCategory, onS
   )
 }
 
-function ToolWorkspace({ tool, params, presets, favorite, runState, logs, runtimeMode, onBack, onParam, onFavorite, onRun, onCancel, onQueue, onExport, onSavePreset, onLoadPreset, onDeletePreset, onCopy }) {
+function ToolWorkspace({ tool, params, presets, favorite, runState, logs, runtimeMode, onBack, onParam, onFavorite, onRun, onCancel, onQueue, onExport, onSavePreset, onLoadPreset, onDeletePreset, onCopy, desktopArtifacts, onOpenArtifact, onRevealArtifact }) {
   const [presetName, setPresetName] = useState('')
   const [logsOpen, setLogsOpen] = useState(false)
-  const isTextTool = tool.id === 'json-formatter'
+  const template = getWorkspaceTemplate(tool)
+  const isTextTool = template === 'text'
   const artifacts = runState?.artifacts ?? []
 
   useEffect(() => {
@@ -846,7 +868,8 @@ function ToolWorkspace({ tool, params, presets, favorite, runState, logs, runtim
         <div className="runtime-notice"><Icon name="alert" /><span>当前处于 Web 预览模式，外部进程工具不会真正访问本地文件。</span></div>
       )}
 
-      <div className={`workspace-content ${isTextTool ? 'workspace-content--editor' : ''}`}>
+      <div className={`workspace-content workspace-content--${template} ${isTextTool ? 'workspace-content--editor' : ''}`}>
+        {template === 'batch' ? <BatchStepRail tool={tool} params={params} runState={runState} /> : null}
         {isTextTool ? (
           <TextToolLayout tool={tool} params={params} onParam={onParam} artifacts={artifacts} onCopy={onCopy} />
         ) : (
@@ -870,7 +893,18 @@ function ToolWorkspace({ tool, params, presets, favorite, runState, logs, runtim
           </div>
         </div>
 
-        <RunResult runState={runState} artifacts={artifacts} logs={logs} logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((value) => !value)} onCopy={onCopy} />
+        <InspectionResult tool={tool} artifacts={artifacts} />
+        <RunResult
+          runState={runState}
+          artifacts={artifacts}
+          logs={logs}
+          logsOpen={logsOpen}
+          onToggleLogs={() => setLogsOpen((value) => !value)}
+          onCopy={onCopy}
+          desktopArtifacts={desktopArtifacts}
+          onOpenArtifact={onOpenArtifact}
+          onRevealArtifact={onRevealArtifact}
+        />
       </div>
     </div>
   )
@@ -951,7 +985,7 @@ function PresetSection({ presets, name, onName, onSave, onLoad, onDelete }) {
   )
 }
 
-function RunResult({ runState, artifacts, logs, logsOpen, onToggleLogs, onCopy }) {
+function RunResult({ runState, artifacts, logs, logsOpen, onToggleLogs, onCopy, desktopArtifacts, onOpenArtifact, onRevealArtifact }) {
   if (!runState) return null
   return (
     <section className={`workspace-card result-card result-card--${runState.status}`}>
@@ -964,7 +998,7 @@ function RunResult({ runState, artifacts, logs, logsOpen, onToggleLogs, onCopy }
         {runState.status === 'running' && <strong>{runState.progress ?? 0}%</strong>}
       </div>
       {runState.status === 'running' && <Progress value={runState.progress ?? 0} />}
-      {artifacts.length ? <div className="artifact-grid">{artifacts.map((artifact, index) => <article key={`${artifact.label}-${index}`}><span><Icon name={artifact.type === 'text' ? 'code' : artifact.type === 'directory' ? 'folder' : 'file'} /></span><div><strong>{artifact.label}</strong><small>{artifact.path ?? artifact.type}</small></div>{artifact.content ? <button onClick={() => onCopy(artifact.content)}><Icon name="copy" />复制</button> : null}</article>)}</div> : null}
+      <ArtifactList artifacts={artifacts} desktop={desktopArtifacts} onCopy={onCopy} onOpen={onOpenArtifact} onReveal={onRevealArtifact} />
       <button className="log-toggle" onClick={onToggleLogs}><Icon name="terminal" />{logsOpen ? '收起运行日志' : `查看运行日志 (${logs.length})`}<Icon name={logsOpen ? 'chevron-up' : 'chevron-down'} /></button>
       {logsOpen && <div className="run-log">{logs.map((item, index) => <p className={`is-${item.level}`} key={`${item.time}-${index}`}><time>{new Date(item.time).toLocaleTimeString('zh-CN')}</time><span>{item.message}</span></p>)}</div>}
     </section>
